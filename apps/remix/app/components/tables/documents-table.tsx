@@ -1,8 +1,10 @@
-import { useMemo, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 
+import type { MessageDescriptor } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react';
-import { Loader } from 'lucide-react';
+import { Trans } from '@lingui/react/macro';
+import { ChevronDownIcon, Loader } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { Link } from 'react-router';
 import { match } from 'ts-pattern';
@@ -10,10 +12,12 @@ import { match } from 'ts-pattern';
 import { useUpdateSearchParams } from '@documenso/lib/client-only/hooks/use-update-search-params';
 import { useSession } from '@documenso/lib/client-only/providers/session';
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
-import { findRecipientByEmail } from '@documenso/lib/utils/recipients';
+import { findRecipientByEmail, isRecipientExpired } from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath } from '@documenso/lib/utils/teams';
+import { ReadStatus, RecipientRole, SigningStatus } from '@documenso/prisma/client-browser';
 import type { TFindDocumentsResponse } from '@documenso/trpc/server/document-router/find-documents.types';
 import { cn } from '@documenso/ui/lib/utils';
+import { Button } from '@documenso/ui/primitives/button';
 import { Checkbox } from '@documenso/ui/primitives/checkbox';
 import type { DataTableColumnDef, RowSelectionState } from '@documenso/ui/primitives/data-table';
 import { DataTable } from '@documenso/ui/primitives/data-table';
@@ -52,6 +56,7 @@ export const DocumentsTable = ({
 
   const team = useCurrentTeam();
   const [isPending, startTransition] = useTransition();
+  const [expandedEnvelopeId, setExpandedEnvelopeId] = useState<string | null>(null);
 
   const updateSearchParams = useUpdateSearchParams();
 
@@ -86,14 +91,38 @@ export const DocumentsTable = ({
     cols.push(
       {
         header: _(msg`Document`),
-        cell: ({ row }) => (
-          <DataTableTitle
-            row={row.original}
-            teamUrl={team?.url}
-            teamEmail={team?.teamEmail?.email}
-            createdAtLabel={i18n.date(row.original.createdAt, { ...DateTime.DATE_MED })}
-          />
-        ),
+        cell: ({ row }) => {
+          const isExpanded = expandedEnvelopeId === row.original.envelopeId;
+
+          return (
+            <div className="flex items-start gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mt-0.5 h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                aria-expanded={isExpanded}
+                aria-label={isExpanded ? _(msg`Hide signer details`) : _(msg`Show signer details`)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExpandedEnvelopeId((current) =>
+                    current === row.original.envelopeId ? null : row.original.envelopeId,
+                  );
+                }}
+              >
+                <ChevronDownIcon
+                  className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-180')}
+                />
+              </Button>
+              <DataTableTitle
+                row={row.original}
+                teamUrl={team?.url}
+                teamEmail={team?.teamEmail?.email}
+                createdAtLabel={i18n.date(row.original.createdAt, { ...DateTime.DATE_MED })}
+              />
+            </div>
+          );
+        },
       },
       {
         id: 'sender',
@@ -157,7 +186,7 @@ export const DocumentsTable = ({
     );
 
     return cols;
-  }, [team, onMoveDocument, enableSelection]);
+  }, [team, onMoveDocument, enableSelection, expandedEnvelopeId, _, i18n]);
 
   const onPaginationChange = (page: number, perPage: number) => {
     startTransition(() => {
@@ -184,6 +213,8 @@ export const DocumentsTable = ({
         currentPage={results.currentPage}
         totalPages={results.totalPages}
         onPaginationChange={onPaginationChange}
+        expandedRowId={expandedEnvelopeId}
+        renderExpandedRow={(row) => <DocumentsTableSignerBreakdown row={row} />}
         columnVisibility={{
           sender: team !== undefined,
         }}
@@ -356,5 +387,133 @@ const DashboardDocumentStatus = ({ status }: { status: DocumentsTableRow['dashbo
     >
       {statusConfig.label}
     </span>
+  );
+};
+
+const sortDashboardRecipients = (recipients: DocumentsTableRow['recipients']) =>
+  [...recipients].sort((a, b) => {
+    const orderA = a.signingOrder ?? Number.MAX_SAFE_INTEGER;
+    const orderB = b.signingOrder ?? Number.MAX_SAFE_INTEGER;
+
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+
+    return a.id - b.id;
+  });
+
+const getRecipientDashboardStatusLabel = (
+  recipient: DocumentsTableRow['recipients'][number],
+  documentStatus: DocumentsTableRow['status'],
+  translateLabel: (descriptor: MessageDescriptor) => string,
+) => {
+  if (documentStatus === 'DRAFT') {
+    return translateLabel(msg`Not sent`);
+  }
+
+  if (recipient.signingStatus === SigningStatus.SIGNED) {
+    return match(recipient.role)
+      .with(RecipientRole.APPROVER, () => translateLabel(msg`Approved`))
+      .with(RecipientRole.CC, () =>
+        documentStatus === 'COMPLETED' ? translateLabel(msg`Sent`) : translateLabel(msg`Ready`),
+      )
+      .with(RecipientRole.SIGNER, () => translateLabel(msg`Signed`))
+      .with(RecipientRole.VIEWER, () => translateLabel(msg`Viewed`))
+      .with(RecipientRole.ASSISTANT, () => translateLabel(msg`Assisted`))
+      .otherwise(() => translateLabel(msg`Unknown`));
+  }
+
+  if (recipient.signingStatus === SigningStatus.REJECTED) {
+    return translateLabel(msg`Rejected`);
+  }
+
+  if (isRecipientExpired(recipient)) {
+    return translateLabel(msg`Expired`);
+  }
+
+  if (recipient.role === RecipientRole.CC) {
+    return translateLabel(msg`Pending`);
+  }
+
+  if (
+    recipient.readStatus === ReadStatus.OPENED &&
+    recipient.signingStatus === SigningStatus.NOT_SIGNED
+  ) {
+    return translateLabel(msg`Opened`);
+  }
+
+  return translateLabel(msg`Pending`);
+};
+
+const DocumentsTableSignerBreakdown = ({ row }: { row: DocumentsTableRow }) => {
+  const { _, i18n } = useLingui();
+  const recipients = useMemo(() => sortDashboardRecipients(row.recipients), [row.recipients]);
+
+  if (recipients.length === 0) {
+    return (
+      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+        <Trans>No recipients</Trans>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-4 py-3">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <Trans>Signer breakdown</Trans>
+      </p>
+      <div className="overflow-x-auto rounded-md border border-border bg-background">
+        <table className="w-full min-w-[640px] text-left text-sm">
+          <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2 font-medium">
+                <Trans>Name</Trans>
+              </th>
+              <th className="px-3 py-2 font-medium">
+                <Trans>Email</Trans>
+              </th>
+              <th className="px-3 py-2 font-medium">
+                <Trans>Status</Trans>
+              </th>
+              <th className="px-3 py-2 font-medium">
+                <Trans>Last action</Trans>
+              </th>
+              <th className="px-3 py-2 font-medium">
+                <Trans>Device</Trans>
+              </th>
+              <th className="px-3 py-2 font-medium">
+                <Trans>IP address</Trans>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {recipients.map((recipient) => (
+              <tr key={recipient.id} className="text-foreground">
+                <td className="max-w-[10rem] truncate px-3 py-2.5 font-medium">
+                  {recipient.name?.trim() ? recipient.name : '—'}
+                </td>
+                <td className="max-w-[14rem] truncate px-3 py-2.5 text-muted-foreground">
+                  {recipient.email}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2.5">
+                  {getRecipientDashboardStatusLabel(recipient, row.status, (descriptor) =>
+                    _(descriptor),
+                  )}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
+                  {recipient.signedAt
+                    ? i18n.date(recipient.signedAt, { ...DateTime.DATETIME_MED })
+                    : '—'}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">—</td>
+                <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                  —
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 };

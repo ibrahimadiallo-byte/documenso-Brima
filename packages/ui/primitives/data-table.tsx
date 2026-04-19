@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { Fragment, useMemo } from 'react';
 
 import { Trans } from '@lingui/react/macro';
 import type {
@@ -45,6 +45,9 @@ export interface DataTableProps<TData, TValue> {
   rowSelection?: RowSelectionState;
   onRowSelectionChange?: (selection: RowSelectionState) => void;
   getRowId?: (row: TData) => string;
+  /** When set, the matching row id (from `getRowId` or row id) shows `renderExpandedRow` below the main row. */
+  expandedRowId?: string | null;
+  renderExpandedRow?: (row: TData) => React.ReactNode;
 }
 
 export function DataTable<TData, TValue>({
@@ -67,6 +70,8 @@ export function DataTable<TData, TValue>({
   rowSelection,
   onRowSelectionChange,
   getRowId,
+  expandedRowId,
+  renderExpandedRow,
 }: DataTableProps<TData, TValue>) {
   const pagination = useMemo<PaginationState>(() => {
     if (currentPage !== undefined && perPage !== undefined) {
@@ -139,25 +144,44 @@ export function DataTable<TData, TValue>({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && 'selected'}
-                  className={rowClassName}
-                  onClick={() => onRowClick?.(row.original)}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell
-                      key={cell.id}
-                      style={{
-                        width: `${cell.column.getSize()}px`,
-                      }}
+              table.getRowModel().rows.map((row) => {
+                const rowExpandId = getRowId?.(row.original) ?? row.id;
+                const isExpanded = Boolean(
+                  renderExpandedRow && expandedRowId !== undefined && expandedRowId === rowExpandId,
+                );
+
+                return (
+                  <Fragment key={row.id}>
+                    <TableRow
+                      data-state={row.getIsSelected() && 'selected'}
+                      className={rowClassName}
+                      onClick={() => onRowClick?.(row.original)}
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell
+                          key={cell.id}
+                          style={{
+                            width: `${cell.column.getSize()}px`,
+                          }}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+
+                    {isExpanded && renderExpandedRow && (
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell
+                          colSpan={row.getVisibleCells().length}
+                          className="border-t bg-muted/30 p-0"
+                        >
+                          {renderExpandedRow(row.original)}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })
             ) : error?.enable ? (
               <TableRow>
                 {error.component ?? (
