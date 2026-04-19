@@ -11,6 +11,19 @@ import { LegacyDocumentSchema } from '@documenso/prisma/types/document-legacy-sc
 import { ZFieldSchema } from './field';
 import { ZRecipientLiteSchema } from './recipient';
 
+export const ZDashboardDocumentStatusSchema = z.enum([
+  'DRAFT',
+  'SENT',
+  'PARTIALLY_SIGNED',
+  'COMPLETED',
+  'EXPIRED',
+]);
+
+export const ZDashboardSignerProgressSchema = z.object({
+  signed: z.number(),
+  total: z.number(),
+});
+
 /**
  * The full document response schema.
  *
@@ -178,6 +191,10 @@ export const ZDocumentManySchema = LegacyDocumentSchema.pick({
     id: true,
     url: true,
   }).nullable(),
+  dashboardStatus: ZDashboardDocumentStatusSchema,
+  signerProgress: ZDashboardSignerProgressSchema,
+  lastActivityAt: z.date(),
+  daysSinceLastActivity: z.number(),
 });
 
 export type TDocumentMany = z.infer<typeof ZDocumentManySchema>;

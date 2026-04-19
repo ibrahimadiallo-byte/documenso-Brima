@@ -6,13 +6,20 @@ import type {
   Team,
   User,
 } from '@prisma/client';
-import { DocumentDistributionMethod, DocumentSigningOrder, DocumentStatus } from '@prisma/client';
+import {
+  DocumentDistributionMethod,
+  DocumentSigningOrder,
+  DocumentStatus,
+  RecipientRole,
+  SigningStatus,
+} from '@prisma/client';
 
 import { DEFAULT_DOCUMENT_TIME_ZONE } from '../constants/time-zones';
 import type { TDocumentLite, TDocumentMany } from '../types/document';
 import { DEFAULT_DOCUMENT_EMAIL_SETTINGS } from '../types/document-email';
 import { mapSecondaryIdToDocumentId } from './envelope';
 import { mapRecipientToLegacyRecipient } from './recipients';
+import { isRecipientExpired } from './recipients';
 
 export const isDocumentCompleted = (document: Pick<Envelope, 'status'> | DocumentStatus) => {
   const status = typeof document === 'string' ? document : document.status;
@@ -107,6 +114,68 @@ type MapEnvelopeToDocumentManyOptions = Envelope & {
   recipients: Recipient[];
 };
 
+const getDashboardSignerProgress = (recipients: Recipient[]) => {
+  const actionableRecipients = recipients.filter(
+    (recipient) =>
+      recipient.role === RecipientRole.SIGNER || recipient.role === RecipientRole.APPROVER,
+  );
+
+  return {
+    signed: actionableRecipients.filter(
+      (recipient) => recipient.signingStatus === SigningStatus.SIGNED,
+    ).length,
+    total: actionableRecipients.length,
+  };
+};
+
+const getDashboardStatus = (
+  envelope: Pick<Envelope, 'status'>,
+  recipients: Recipient[],
+): TDocumentMany['dashboardStatus'] => {
+  if (envelope.status === DocumentStatus.DRAFT) {
+    return 'DRAFT';
+  }
+
+  if (envelope.status === DocumentStatus.COMPLETED || envelope.status === DocumentStatus.REJECTED) {
+    return 'COMPLETED';
+  }
+
+  if (recipients.some((recipient) => isRecipientExpired(recipient))) {
+    return 'EXPIRED';
+  }
+
+  const signerProgress = getDashboardSignerProgress(recipients);
+
+  if (signerProgress.signed > 0 && signerProgress.signed < signerProgress.total) {
+    return 'PARTIALLY_SIGNED';
+  }
+
+  return 'SENT';
+};
+
+const getLastActivityAt = (
+  envelope: Pick<Envelope, 'updatedAt' | 'completedAt'>,
+  recipients: Recipient[],
+) => {
+  const recipientActivityDates = recipients.flatMap((recipient) => {
+    const activityDates = [recipient.signedAt];
+
+    return activityDates.filter((date): date is Date => Boolean(date));
+  });
+
+  const lastActivityAt = [envelope.updatedAt, envelope.completedAt, ...recipientActivityDates]
+    .filter((date): date is Date => Boolean(date))
+    .reduce((latest, current) => (current > latest ? current : latest), envelope.updatedAt);
+
+  return lastActivityAt;
+};
+
+const getDaysSinceLastActivity = (lastActivityAt: Date) => {
+  const millisecondsInDay = 1000 * 60 * 60 * 24;
+
+  return Math.max(0, Math.floor((Date.now() - lastActivityAt.getTime()) / millisecondsInDay));
+};
+
 /**
  * Map an envelope to a legacy document many response entity.
  *
@@ -116,6 +185,8 @@ export const mapEnvelopesToDocumentMany = (
   envelope: MapEnvelopeToDocumentManyOptions,
 ): TDocumentMany => {
   const legacyDocumentId = mapSecondaryIdToDocumentId(envelope.secondaryId);
+  const signerProgress = getDashboardSignerProgress(envelope.recipients);
+  const lastActivityAt = getLastActivityAt(envelope, envelope.recipients);
 
   return {
     id: legacyDocumentId, // Use legacy ID.
@@ -150,5 +221,9 @@ export const mapEnvelopesToDocumentMany = (
     recipients: envelope.recipients.map((recipient) =>
       mapRecipientToLegacyRecipient(recipient, envelope),
     ),
+    dashboardStatus: getDashboardStatus(envelope, envelope.recipients),
+    signerProgress,
+    lastActivityAt,
+    daysSinceLastActivity: getDaysSinceLastActivity(lastActivityAt),
   };
 };

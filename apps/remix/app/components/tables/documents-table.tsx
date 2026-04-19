@@ -13,6 +13,7 @@ import { isDocumentCompleted } from '@documenso/lib/utils/document';
 import { findRecipientByEmail } from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath } from '@documenso/lib/utils/teams';
 import type { TFindDocumentsResponse } from '@documenso/trpc/server/document-router/find-documents.types';
+import { cn } from '@documenso/ui/lib/utils';
 import { Checkbox } from '@documenso/ui/primitives/checkbox';
 import type { DataTableColumnDef, RowSelectionState } from '@documenso/ui/primitives/data-table';
 import { DataTable } from '@documenso/ui/primitives/data-table';
@@ -20,7 +21,6 @@ import { DataTablePagination } from '@documenso/ui/primitives/data-table-paginat
 import { Skeleton } from '@documenso/ui/primitives/skeleton';
 import { TableCell } from '@documenso/ui/primitives/table';
 
-import { DocumentStatus } from '~/components/general/document/document-status';
 import { useCurrentTeam } from '~/providers/team';
 
 import { StackAvatarsWithTooltip } from '../general/stack-avatars-with-tooltip';
@@ -85,18 +85,13 @@ export const DocumentsTable = ({
 
     cols.push(
       {
-        header: _(msg`Created`),
-        accessorKey: 'createdAt',
-        cell: ({ row }) =>
-          i18n.date(row.original.createdAt, { ...DateTime.DATETIME_SHORT, hourCycle: 'h12' }),
-      },
-      {
-        header: _(msg`Title`),
+        header: _(msg`Document`),
         cell: ({ row }) => (
           <DataTableTitle
             row={row.original}
             teamUrl={team?.url}
             teamEmail={team?.teamEmail?.email}
+            createdAtLabel={i18n.date(row.original.createdAt, { ...DateTime.DATE_MED })}
           />
         ),
       },
@@ -117,8 +112,33 @@ export const DocumentsTable = ({
       },
       {
         header: _(msg`Status`),
-        accessorKey: 'status',
-        cell: ({ row }) => <DocumentStatus status={row.original.status} />,
+        accessorKey: 'dashboardStatus',
+        cell: ({ row }) => <DashboardDocumentStatus status={row.original.dashboardStatus} />,
+        size: 160,
+      },
+      {
+        header: _(msg`Signers`),
+        accessorKey: 'signerProgress',
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.signerProgress.signed} / {row.original.signerProgress.total}
+          </span>
+        ),
+        size: 100,
+      },
+      {
+        header: _(msg`Last Activity`),
+        accessorKey: 'daysSinceLastActivity',
+        cell: ({ row }) => (
+          <div className="flex flex-col">
+            <span className="text-sm text-foreground">
+              {formatDaysSinceLastActivity(row.original.daysSinceLastActivity)}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {i18n.date(row.original.lastActivityAt, { ...DateTime.DATE_MED })}
+            </span>
+          </div>
+        ),
         size: 140,
       },
       {
@@ -221,9 +241,10 @@ type DataTableTitleProps = {
   row: DocumentsTableRow;
   teamUrl: string;
   teamEmail?: string;
+  createdAtLabel: string;
 };
 
-const DataTableTitle = ({ row, teamUrl, teamEmail }: DataTableTitleProps) => {
+const DataTableTitle = ({ row, teamUrl, teamEmail, createdAtLabel }: DataTableTitleProps) => {
   const { user } = useSession();
 
   const recipient = findRecipientByEmail({
@@ -245,26 +266,95 @@ const DataTableTitle = ({ row, teamUrl, teamEmail }: DataTableTitleProps) => {
     isCurrentTeamDocument,
   })
     .with({ isOwner: true }, { isCurrentTeamDocument: true }, () => (
-      <Link
-        to={formatPath}
-        title={row.title}
-        className="block max-w-[10rem] truncate font-medium hover:underline md:max-w-[20rem]"
-      >
-        {row.title}
-      </Link>
+      <DocumentTitleLink to={formatPath} title={row.title} createdAtLabel={createdAtLabel} />
     ))
     .with({ isRecipient: true }, () => (
-      <Link
+      <DocumentTitleLink
         to={`/sign/${recipient?.token}`}
         title={row.title}
-        className="block max-w-[10rem] truncate font-medium hover:underline md:max-w-[20rem]"
-      >
-        {row.title}
-      </Link>
+        createdAtLabel={createdAtLabel}
+      />
     ))
     .otherwise(() => (
-      <span className="block max-w-[10rem] truncate font-medium hover:underline md:max-w-[20rem]">
-        {row.title}
-      </span>
+      <div className="flex flex-col">
+        <span className="block max-w-[10rem] truncate font-medium md:max-w-[20rem]">
+          {row.title}
+        </span>
+        <span className="text-xs text-muted-foreground">{createdAtLabel}</span>
+      </div>
     ));
+};
+
+const DocumentTitleLink = ({
+  to,
+  title,
+  createdAtLabel,
+}: {
+  to: string;
+  title: string;
+  createdAtLabel: string;
+}) => (
+  <div className="flex flex-col">
+    <Link
+      to={to}
+      title={title}
+      className="block max-w-[10rem] truncate font-medium hover:underline md:max-w-[20rem]"
+    >
+      {title}
+    </Link>
+    <span className="text-xs text-muted-foreground">{createdAtLabel}</span>
+  </div>
+);
+
+const formatDaysSinceLastActivity = (daysSinceLastActivity: number) => {
+  if (daysSinceLastActivity === 0) {
+    return 'Today';
+  }
+
+  if (daysSinceLastActivity === 1) {
+    return '1 day ago';
+  }
+
+  return `${daysSinceLastActivity} days ago`;
+};
+
+const DASHBOARD_STATUS_STYLES: Record<
+  DocumentsTableRow['dashboardStatus'],
+  { label: string; className: string }
+> = {
+  DRAFT: {
+    label: 'Draft',
+    className: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-200',
+  },
+  SENT: {
+    label: 'Sent',
+    className: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200',
+  },
+  PARTIALLY_SIGNED: {
+    label: 'Partially Signed',
+    className: 'bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-200',
+  },
+  COMPLETED: {
+    label: 'Completed',
+    className: 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-200',
+  },
+  EXPIRED: {
+    label: 'Expired',
+    className: 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-200',
+  },
+};
+
+const DashboardDocumentStatus = ({ status }: { status: DocumentsTableRow['dashboardStatus'] }) => {
+  const statusConfig = DASHBOARD_STATUS_STYLES[status];
+
+  return (
+    <span
+      className={cn(
+        'inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium',
+        statusConfig.className,
+      )}
+    >
+      {statusConfig.label}
+    </span>
+  );
 };
