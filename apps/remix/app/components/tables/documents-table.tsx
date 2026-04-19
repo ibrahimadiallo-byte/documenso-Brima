@@ -26,6 +26,7 @@ import { useCurrentTeam } from '~/providers/team';
 import { StackAvatarsWithTooltip } from '../general/stack-avatars-with-tooltip';
 import { DocumentsTableActionButton } from './documents-table-action-button';
 import { DocumentsTableActionDropdown } from './documents-table-action-dropdown';
+import { DocumentsTableActionPrompts } from './documents-table-action-prompts';
 
 export type DocumentsTableProps = {
   data?: TFindDocumentsResponse;
@@ -147,6 +148,7 @@ export const DocumentsTable = ({
           (!row.original.deletedAt || isDocumentCompleted(row.original.status)) && (
             <div className="flex items-center gap-x-4">
               <DocumentsTableActionButton row={row.original} />
+              <DocumentsTableActionPrompts row={row.original} />
               <DocumentsTableActionDropdown
                 row={row.original}
                 onMoveDocument={onMoveDocument ? () => onMoveDocument(row.original.id) : undefined}

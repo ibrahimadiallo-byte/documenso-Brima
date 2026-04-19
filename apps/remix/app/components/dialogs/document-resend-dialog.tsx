@@ -49,6 +49,7 @@ export type DocumentResendDialogProps = {
     team: Pick<Team, 'id' | 'url'> | null;
   };
   recipients: Recipient[];
+  trigger?: React.ReactNode;
 };
 
 export const ZResendDocumentFormSchema = z.object({
@@ -59,7 +60,7 @@ export const ZResendDocumentFormSchema = z.object({
 
 export type TResendDocumentFormSchema = z.infer<typeof ZResendDocumentFormSchema>;
 
-export const DocumentResendDialog = ({ document, recipients }: DocumentResendDialogProps) => {
+export const DocumentResendDialog = ({ document, recipients, trigger }: DocumentResendDialogProps) => {
   const { user } = useSession();
   const team = useCurrentTeam();
 
@@ -118,10 +119,12 @@ export const DocumentResendDialog = ({ document, recipients }: DocumentResendDia
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <DropdownMenuItem disabled={isDisabled} onSelect={(e) => e.preventDefault()}>
-          <History className="mr-2 h-4 w-4" />
-          <Trans>Resend</Trans>
-        </DropdownMenuItem>
+        {trigger ?? (
+          <DropdownMenuItem disabled={isDisabled} onSelect={(e) => e.preventDefault()}>
+            <History className="mr-2 h-4 w-4" />
+            <Trans>Resend</Trans>
+          </DropdownMenuItem>
+        )}
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-sm" hideClose>
