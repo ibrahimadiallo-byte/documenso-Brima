@@ -28,6 +28,7 @@ import { EnvelopesBulkDeleteDialog } from '~/components/dialogs/envelopes-bulk-d
 import { EnvelopesBulkMoveDialog } from '~/components/dialogs/envelopes-bulk-move-dialog';
 import { DocumentSearch } from '~/components/general/document/document-search';
 import { DocumentStatus } from '~/components/general/document/document-status';
+import { DocumentUsageIndicator } from '~/components/general/document/document-usage-indicator';
 import { EnvelopeDropZoneWrapper } from '~/components/general/envelope/envelope-drop-zone-wrapper';
 import { FolderGrid } from '~/components/general/folder/folder-grid';
 import { PeriodSelector } from '~/components/general/period-selector';
@@ -139,17 +140,21 @@ export default function DocumentsPage() {
         <FolderGrid type={FolderType.DOCUMENT} parentId={folderId ?? null} />
 
         <div className="mt-8 flex flex-wrap items-center justify-between gap-x-4 gap-y-8">
-          <div className="flex flex-row items-center">
-            <Avatar className="mr-3 h-12 w-12 border-2 border-solid border-white dark:border-border">
-              {team.avatarImageId && <AvatarImage src={formatAvatarUrl(team.avatarImageId)} />}
-              <AvatarFallback className="text-xs text-muted-foreground">
-                {team.name.slice(0, 1)}
-              </AvatarFallback>
-            </Avatar>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-row items-center">
+              <Avatar className="mr-3 h-12 w-12 border-2 border-solid border-white dark:border-border">
+                {team.avatarImageId && <AvatarImage src={formatAvatarUrl(team.avatarImageId)} />}
+                <AvatarFallback className="text-xs text-muted-foreground">
+                  {team.name.slice(0, 1)}
+                </AvatarFallback>
+              </Avatar>
 
-            <h2 className="text-4xl font-semibold">
-              <Trans>Documents</Trans>
-            </h2>
+              <h2 className="text-4xl font-semibold">
+                <Trans>Documents</Trans>
+              </h2>
+            </div>
+
+            <DocumentUsageIndicator />
           </div>
 
           <div className="-m-1 flex flex-wrap gap-x-4 gap-y-6 overflow-hidden p-1">
