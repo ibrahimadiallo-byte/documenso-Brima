@@ -49,6 +49,7 @@ export type DocumentResendDialogProps = {
     team: Pick<Team, 'id' | 'url'> | null;
   };
   recipients: Recipient[];
+  trigger?: React.ReactNode;
 };
 
 export const ZResendDocumentFormSchema = z.object({
@@ -59,7 +60,11 @@ export const ZResendDocumentFormSchema = z.object({
 
 export type TResendDocumentFormSchema = z.infer<typeof ZResendDocumentFormSchema>;
 
-export const DocumentResendDialog = ({ document, recipients }: DocumentResendDialogProps) => {
+export const DocumentResendDialog = ({
+  document,
+  recipients,
+  trigger,
+}: DocumentResendDialogProps) => {
   const { user } = useSession();
   const team = useCurrentTeam();
 
@@ -118,16 +123,18 @@ export const DocumentResendDialog = ({ document, recipients }: DocumentResendDia
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <DropdownMenuItem disabled={isDisabled} onSelect={(e) => e.preventDefault()}>
-          <History className="mr-2 h-4 w-4" />
-          <Trans>Resend</Trans>
-        </DropdownMenuItem>
+        {trigger ?? (
+          <DropdownMenuItem disabled={isDisabled} onSelect={(e) => e.preventDefault()}>
+            <History className="mr-2 h-4 w-4" />
+            <Trans>Resend</Trans>
+          </DropdownMenuItem>
+        )}
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-sm" hideClose>
         <DialogHeader>
           <DialogTitle asChild>
-            <h1 className="text-center text-xl">
+            <h1 className="text-xl text-center">
               <Trans>Who do you want to remind?</Trans>
             </h1>
           </DialogTitle>
@@ -143,10 +150,10 @@ export const DocumentResendDialog = ({ document, recipients }: DocumentResendDia
                   {recipients.map((recipient) => (
                     <FormItem
                       key={recipient.id}
-                      className="flex flex-row items-center justify-between gap-x-3"
+                      className="gap-x-3 flex flex-row items-center justify-between"
                     >
                       <FormLabel
-                        className={cn('my-2 flex items-center gap-2 font-normal', {
+                        className={cn('my-2 gap-2 font-normal flex items-center', {
                           'opacity-50': !value.includes(recipient.id),
                         })}
                       >
@@ -160,7 +167,7 @@ export const DocumentResendDialog = ({ document, recipients }: DocumentResendDia
 
                       <FormControl>
                         <Checkbox
-                          className="h-5 w-5 rounded-full border border-neutral-400"
+                          className="h-5 w-5 border-neutral-400 rounded-full border"
                           value={recipient.id}
                           checked={value.includes(recipient.id)}
                           onCheckedChange={(checked: boolean) =>
@@ -179,11 +186,11 @@ export const DocumentResendDialog = ({ document, recipients }: DocumentResendDia
         </Form>
 
         <DialogFooter>
-          <div className="flex w-full flex-1 flex-nowrap gap-4">
+          <div className="gap-4 flex w-full flex-1 flex-nowrap">
             <DialogClose asChild>
               <Button
                 type="button"
-                className="dark:bg-muted dark:hover:bg-muted/80 flex-1 bg-black/5 hover:bg-black/10"
+                className="dark:bg-muted dark:hover:bg-muted/80 bg-black/5 hover:bg-black/10 flex-1"
                 variant="secondary"
                 disabled={isSubmitting}
               >

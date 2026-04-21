@@ -32,6 +32,7 @@ import { TableCell } from '@documenso/ui/primitives/table';
 import { useCurrentTeam } from '~/providers/team';
 
 import { StackAvatarsWithTooltip } from '../general/stack-avatars-with-tooltip';
+import { DocumentActionPrompts } from './document-action-prompts';
 import { DocumentsTableActionButton } from './documents-table-action-button';
 import { DocumentsTableActionDropdown } from './documents-table-action-dropdown';
 
@@ -99,12 +100,12 @@ export const DocumentsTable = ({
           const isExpanded = expandedEnvelopeId === row.original.envelopeId;
 
           return (
-            <div className="flex items-start gap-1">
+            <div className="gap-1 flex items-start">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="mt-0.5 h-7 w-7 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+                className="mt-0.5 h-7 w-7 p-0 text-muted-foreground hover:text-foreground shrink-0"
                 aria-expanded={isExpanded}
                 aria-label={isExpanded ? _(msg`Hide signer details`) : _(msg`Show signer details`)}
                 onClick={(event) => {
@@ -178,8 +179,9 @@ export const DocumentsTable = ({
         header: _(msg`Actions`),
         cell: ({ row }) =>
           (!row.original.deletedAt || isDocumentCompleted(row.original.status)) && (
-            <div className="flex items-center gap-x-4">
+            <div className="gap-x-4 flex items-center">
               <DocumentsTableActionButton row={row.original} />
+              <DocumentActionPrompts row={row.original} />
               <DocumentsTableActionDropdown
                 row={row.original}
                 onMoveDocument={onMoveDocument ? () => onMoveDocument(row.original.id) : undefined}
@@ -264,7 +266,7 @@ export const DocumentsTable = ({
       </DataTable>
 
       {isPending && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+        <div className="inset-0 bg-background/50 absolute flex items-center justify-center">
           <Loader className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       )}
@@ -312,7 +314,7 @@ const DataTableTitle = ({ row, teamUrl, teamEmail, createdAtLabel }: DataTableTi
     ))
     .otherwise(() => (
       <div className="flex flex-col">
-        <span className="block max-w-[10rem] truncate font-medium md:max-w-[20rem]">
+        <span className="font-medium md:max-w-[20rem] block max-w-[10rem] truncate">
           {row.title}
         </span>
         <span className="text-xs text-muted-foreground">{createdAtLabel}</span>
@@ -333,7 +335,7 @@ const DocumentTitleLink = ({
     <Link
       to={to}
       title={title}
-      className="block max-w-[10rem] truncate font-medium hover:underline md:max-w-[20rem]"
+      className="font-medium md:max-w-[20rem] block max-w-[10rem] truncate hover:underline"
     >
       {title}
     </Link>
@@ -385,7 +387,7 @@ const DashboardDocumentStatus = ({ status }: { status: DocumentsTableRow['dashbo
   return (
     <span
       className={cn(
-        'inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium',
+        'px-2.5 py-1 text-xs font-medium inline-flex rounded-full whitespace-nowrap',
         statusConfig.className,
       )}
     >
@@ -567,7 +569,7 @@ const DocumentsTableSignerBreakdown = ({ row }: { row: DocumentsTableRow }) => {
 
   if (recipients.length === 0) {
     return (
-      <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+      <div className="px-4 py-6 text-sm text-muted-foreground text-center">
         <Trans>No recipients</Trans>
       </div>
     );
@@ -577,12 +579,12 @@ const DocumentsTableSignerBreakdown = ({ row }: { row: DocumentsTableRow }) => {
 
   return (
     <div className="px-4 py-3">
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
         <Trans>Signer breakdown</Trans>
       </p>
-      <div className="overflow-x-auto rounded-md border border-border bg-background">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="border-b bg-muted/40 text-xs text-muted-foreground">
+      <div className="rounded-md border-border bg-background overflow-x-auto border">
+        <table className="text-sm w-full min-w-[640px] text-left">
+          <thead className="bg-muted/40 text-xs text-muted-foreground border-b">
             <tr>
               <th className="px-3 py-2 font-medium">
                 <Trans>Name</Trans>
@@ -611,28 +613,28 @@ const DocumentsTableSignerBreakdown = ({ row }: { row: DocumentsTableRow }) => {
 
               return (
                 <tr key={recipient.id} className="text-foreground">
-                  <td className="max-w-[10rem] truncate px-3 py-2.5 font-medium">
+                  <td className="px-3 py-2.5 font-medium max-w-[10rem] truncate">
                     {recipient.name?.trim() ? recipient.name : '—'}
                   </td>
-                  <td className="max-w-[14rem] truncate px-3 py-2.5 text-muted-foreground">
+                  <td className="px-3 py-2.5 text-muted-foreground max-w-[14rem] truncate">
                     {recipient.email}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5">
+                  <td className="px-3 py-2.5 whitespace-nowrap">
                     {getRecipientDashboardStatusLabel(recipient, row.status, (descriptor) =>
                       _(descriptor),
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
+                  <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">
                     {recipient.signedAt
                       ? i18n.date(recipient.signedAt, { ...DateTime.DATETIME_MED })
                       : '—'}
                   </td>
                   <td
-                    className="max-w-[14rem] truncate px-3 py-2.5 text-muted-foreground"
+                    className="px-3 py-2.5 text-muted-foreground max-w-[14rem] truncate"
                     title={device ?? undefined}
                   >
                     {isMetadataPending ? (
-                      <span className="inline-flex items-center gap-1 text-xs">
+                      <span className="gap-1 text-xs inline-flex items-center">
                         <Loader className="h-3 w-3 animate-spin" aria-hidden="true" />
                         <Trans>Loading</Trans>
                       </span>
@@ -640,9 +642,9 @@ const DocumentsTableSignerBreakdown = ({ row }: { row: DocumentsTableRow }) => {
                       (device ?? '—')
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                  <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground whitespace-nowrap">
                     {isMetadataPending ? (
-                      <span className="inline-flex items-center gap-1">
+                      <span className="gap-1 inline-flex items-center">
                         <Loader className="h-3 w-3 animate-spin" aria-hidden="true" />
                       </span>
                     ) : (
