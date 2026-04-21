@@ -8,13 +8,17 @@ import { ChevronDownIcon, Loader } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { Link } from 'react-router';
 import { match } from 'ts-pattern';
+import { UAParser } from 'ua-parser-js';
 
 import { useUpdateSearchParams } from '@documenso/lib/client-only/hooks/use-update-search-params';
 import { useSession } from '@documenso/lib/client-only/providers/session';
+import { DOCUMENT_AUDIT_LOG_TYPE } from '@documenso/lib/types/document-audit-logs';
+import type { TDocumentAuditLog } from '@documenso/lib/types/document-audit-logs';
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
 import { findRecipientByEmail, isRecipientExpired } from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath } from '@documenso/lib/utils/teams';
 import { ReadStatus, RecipientRole, SigningStatus } from '@documenso/prisma/client-browser';
+import { trpc } from '@documenso/trpc/react';
 import type { TFindDocumentsResponse } from '@documenso/trpc/server/document-router/find-documents.types';
 import { cn } from '@documenso/ui/lib/utils';
 import { Button } from '@documenso/ui/primitives/button';
@@ -445,9 +449,121 @@ const getRecipientDashboardStatusLabel = (
   return translateLabel(msg`Pending`);
 };
 
+type RecipientAuditMetadata = {
+  ipAddress: string | null;
+  userAgent: string | null;
+};
+
+// Prefer logs that represent a real signing action (and therefore carry
+// trustworthy IP / user-agent metadata). Fall back to earlier events so we
+// still surface some context for partially-signed / opened documents.
+const RECIPIENT_AUDIT_LOG_PRIORITY: Partial<Record<TDocumentAuditLog['type'], number>> = {
+  [DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_COMPLETED]: 100,
+  [DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_RECIPIENT_REJECTED]: 90,
+  [DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_INSERTED]: 80,
+  [DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_FIELD_UNINSERTED]: 70,
+  [DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_OPENED]: 60,
+  [DOCUMENT_AUDIT_LOG_TYPE.DOCUMENT_VIEWED]: 50,
+};
+
+const getRecipientAuditMetadataMap = (
+  logs: TDocumentAuditLog[],
+  recipients: DocumentsTableRow['recipients'],
+) => {
+  const metadataByRecipientId = new Map<number, RecipientAuditMetadata>();
+  const bestScoreByRecipientId = new Map<number, number>();
+
+  const emailToRecipientId = new Map<string, number>();
+  for (const recipient of recipients) {
+    emailToRecipientId.set(recipient.email.toLowerCase(), recipient.id);
+  }
+
+  for (const log of logs) {
+    if (!log.ipAddress && !log.userAgent) {
+      continue;
+    }
+
+    const priority = RECIPIENT_AUDIT_LOG_PRIORITY[log.type] ?? 0;
+
+    if (priority === 0) {
+      continue;
+    }
+
+    // Resolve the recipient this log belongs to. Prefer the structured
+    // recipientId on the log data, fall back to matching the base email.
+    const logData = log.data as { recipientId?: number } | undefined;
+    let recipientId = logData?.recipientId ?? null;
+
+    if (recipientId === null && log.email) {
+      recipientId = emailToRecipientId.get(log.email.toLowerCase()) ?? null;
+    }
+
+    if (recipientId === null) {
+      continue;
+    }
+
+    const existingScore = bestScoreByRecipientId.get(recipientId) ?? -1;
+
+    if (priority <= existingScore) {
+      continue;
+    }
+
+    bestScoreByRecipientId.set(recipientId, priority);
+    metadataByRecipientId.set(recipientId, {
+      ipAddress: log.ipAddress ?? null,
+      userAgent: log.userAgent ?? null,
+    });
+  }
+
+  return metadataByRecipientId;
+};
+
+const getDeviceFromUserAgent = (userAgent: string | null | undefined) => {
+  if (!userAgent) {
+    return null;
+  }
+
+  const parser = new UAParser(userAgent);
+  const { os, browser } = parser.getResult();
+
+  const osLabel = os.name ?? null;
+  const browserLabel = browser.name
+    ? [browser.name, browser.version].filter(Boolean).join(' ')
+    : null;
+
+  const parts = [osLabel, browserLabel].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(' · ') : null;
+};
+
 const DocumentsTableSignerBreakdown = ({ row }: { row: DocumentsTableRow }) => {
   const { _, i18n } = useLingui();
   const recipients = useMemo(() => sortDashboardRecipients(row.recipients), [row.recipients]);
+
+  // Drafts have never been sent, so there is no audit log metadata to fetch.
+  const shouldFetchAuditLogs = recipients.length > 0 && row.status !== 'DRAFT';
+
+  const { data: auditLogData, isLoading: isLoadingAuditLogs } =
+    trpc.document.auditLog.find.useQuery(
+      {
+        documentId: row.id,
+        perPage: 100,
+        orderByColumn: 'createdAt',
+        orderByDirection: 'desc',
+      },
+      {
+        enabled: shouldFetchAuditLogs,
+        staleTime: 60 * 1000,
+      },
+    );
+
+  const recipientMetadata = useMemo(() => {
+    if (!auditLogData?.data) {
+      return new Map<number, RecipientAuditMetadata>();
+    }
+
+    return getRecipientAuditMetadataMap(auditLogData.data, recipients);
+  }, [auditLogData, recipients]);
 
   if (recipients.length === 0) {
     return (
@@ -456,6 +572,8 @@ const DocumentsTableSignerBreakdown = ({ row }: { row: DocumentsTableRow }) => {
       </div>
     );
   }
+
+  const isMetadataPending = shouldFetchAuditLogs && isLoadingAuditLogs;
 
   return (
     <div className="px-4 py-3">
@@ -487,30 +605,53 @@ const DocumentsTableSignerBreakdown = ({ row }: { row: DocumentsTableRow }) => {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {recipients.map((recipient) => (
-              <tr key={recipient.id} className="text-foreground">
-                <td className="max-w-[10rem] truncate px-3 py-2.5 font-medium">
-                  {recipient.name?.trim() ? recipient.name : '—'}
-                </td>
-                <td className="max-w-[14rem] truncate px-3 py-2.5 text-muted-foreground">
-                  {recipient.email}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2.5">
-                  {getRecipientDashboardStatusLabel(recipient, row.status, (descriptor) =>
-                    _(descriptor),
-                  )}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
-                  {recipient.signedAt
-                    ? i18n.date(recipient.signedAt, { ...DateTime.DATETIME_MED })
-                    : '—'}
-                </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">—</td>
-                <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-muted-foreground">
-                  —
-                </td>
-              </tr>
-            ))}
+            {recipients.map((recipient) => {
+              const metadata = recipientMetadata.get(recipient.id);
+              const device = getDeviceFromUserAgent(metadata?.userAgent);
+
+              return (
+                <tr key={recipient.id} className="text-foreground">
+                  <td className="max-w-[10rem] truncate px-3 py-2.5 font-medium">
+                    {recipient.name?.trim() ? recipient.name : '—'}
+                  </td>
+                  <td className="max-w-[14rem] truncate px-3 py-2.5 text-muted-foreground">
+                    {recipient.email}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5">
+                    {getRecipientDashboardStatusLabel(recipient, row.status, (descriptor) =>
+                      _(descriptor),
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
+                    {recipient.signedAt
+                      ? i18n.date(recipient.signedAt, { ...DateTime.DATETIME_MED })
+                      : '—'}
+                  </td>
+                  <td
+                    className="max-w-[14rem] truncate px-3 py-2.5 text-muted-foreground"
+                    title={device ?? undefined}
+                  >
+                    {isMetadataPending ? (
+                      <span className="inline-flex items-center gap-1 text-xs">
+                        <Loader className="h-3 w-3 animate-spin" aria-hidden="true" />
+                        <Trans>Loading</Trans>
+                      </span>
+                    ) : (
+                      (device ?? '—')
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                    {isMetadataPending ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Loader className="h-3 w-3 animate-spin" aria-hidden="true" />
+                      </span>
+                    ) : (
+                      (metadata?.ipAddress ?? '—')
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
