@@ -25,8 +25,9 @@ const REMINDER_THRESHOLD_HOURS = 48;
 function isPendingOverThreshold(recipient: TDocumentRow['recipients'][number]): boolean {
   const referenceTime = recipient.lastReminderSentAt ?? recipient.sentAt;
   if (!referenceTime) return false;
-  const hoursSince = (Date.now() - new Date(referenceTime).getTime()) / (1000 * 60 * 60);
-  return hoursSince >= REMINDER_THRESHOLD_HOURS;
+  const ms = new Date(referenceTime).getTime();
+  if (isNaN(ms)) return false;
+  return (Date.now() - ms) / (1000 * 60 * 60) >= REMINDER_THRESHOLD_HOURS;
 }
 
 export type DocumentActionPromptsProps = {
@@ -42,7 +43,7 @@ export const DocumentActionPrompts = ({ row }: DocumentActionPromptsProps) => {
   const auditLogPath = `${documentsPath}/${row.envelopeId}/logs`;
 
   // Owner guard — none of these buttons should be visible to signers or CC recipients
-  const isOwner = row.user.id === user?.id;
+  const isOwner = row.user?.id === user?.id;
   // Free tier = finite document quota — Remind requires paid plan
   const isFreeTier = isFinite(quota.documents) && quota.documents > 0;
   const isPending = row.status === DocumentStatus.PENDING;
