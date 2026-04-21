@@ -28,6 +28,7 @@ import { EnvelopesBulkDeleteDialog } from '~/components/dialogs/envelopes-bulk-d
 import { EnvelopesBulkMoveDialog } from '~/components/dialogs/envelopes-bulk-move-dialog';
 import { DocumentSearch } from '~/components/general/document/document-search';
 import { DocumentStatus } from '~/components/general/document/document-status';
+import { DocumentUsageIndicator } from '~/components/general/document/document-usage-indicator';
 import { EnvelopeDropZoneWrapper } from '~/components/general/envelope/envelope-drop-zone-wrapper';
 import { FolderGrid } from '~/components/general/folder/folder-grid';
 import { PeriodSelector } from '~/components/general/period-selector';
@@ -135,24 +136,28 @@ export default function DocumentsPage() {
 
   return (
     <EnvelopeDropZoneWrapper type={EnvelopeType.DOCUMENT}>
-      <div className="mx-auto w-full max-w-screen-xl px-4 md:px-8">
+      <div className="max-w-screen-xl px-4 md:px-8 mx-auto w-full">
         <FolderGrid type={FolderType.DOCUMENT} parentId={folderId ?? null} />
 
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-x-4 gap-y-8">
-          <div className="flex flex-row items-center">
-            <Avatar className="mr-3 h-12 w-12 border-2 border-solid border-white dark:border-border">
-              {team.avatarImageId && <AvatarImage src={formatAvatarUrl(team.avatarImageId)} />}
-              <AvatarFallback className="text-xs text-muted-foreground">
-                {team.name.slice(0, 1)}
-              </AvatarFallback>
-            </Avatar>
+        <div className="mt-8 gap-x-4 gap-y-8 flex flex-wrap items-center justify-between">
+          <div className="gap-1.5 flex flex-col">
+            <div className="flex flex-row items-center">
+              <Avatar className="mr-3 h-12 w-12 border-white dark:border-border border-2 border-solid">
+                {team.avatarImageId && <AvatarImage src={formatAvatarUrl(team.avatarImageId)} />}
+                <AvatarFallback className="text-xs text-muted-foreground">
+                  {team.name.slice(0, 1)}
+                </AvatarFallback>
+              </Avatar>
 
-            <h2 className="text-4xl font-semibold">
-              <Trans>Documents</Trans>
-            </h2>
+              <h2 className="text-4xl font-semibold">
+                <Trans>Documents</Trans>
+              </h2>
+            </div>
+
+            <DocumentUsageIndicator />
           </div>
 
-          <div className="-m-1 flex flex-wrap gap-x-4 gap-y-6 overflow-hidden p-1">
+          <div className="-m-1 gap-x-4 gap-y-6 p-1 flex flex-wrap overflow-hidden">
             <Tabs value={findDocumentSearchParams.status || 'ALL'} className="overflow-x-auto">
               <TabsList>
                 {[
@@ -172,7 +177,7 @@ export default function DocumentsPage() {
                   .map((value) => (
                     <TabsTrigger
                       key={value}
-                      className="min-w-[60px] hover:text-foreground"
+                      className="hover:text-foreground min-w-[60px]"
                       value={value}
                       asChild
                     >
@@ -194,10 +199,10 @@ export default function DocumentsPage() {
 
             {team && <DocumentsTableSenderFilter teamId={team.id} />}
 
-            <div className="flex w-48 flex-wrap items-center justify-between gap-x-2 gap-y-4">
+            <div className="w-48 gap-x-2 gap-y-4 flex flex-wrap items-center justify-between">
               <PeriodSelector />
             </div>
-            <div className="flex w-48 flex-wrap items-center justify-between gap-x-2 gap-y-4">
+            <div className="w-48 gap-x-2 gap-y-4 flex flex-wrap items-center justify-between">
               <DocumentSearch initialValue={findDocumentSearchParams.query} />
             </div>
           </div>
