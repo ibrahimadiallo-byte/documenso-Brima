@@ -4,6 +4,7 @@ import type { MessageDescriptor } from '@lingui/core';
 import { msg } from '@lingui/core/macro';
 import { useLingui } from '@lingui/react';
 import { Trans } from '@lingui/react/macro';
+import { ReadStatus, RecipientRole, SigningStatus } from '@prisma/client';
 import { ChevronDownIcon, Loader } from 'lucide-react';
 import { DateTime } from 'luxon';
 import { Link } from 'react-router';
@@ -17,7 +18,6 @@ import type { TDocumentAuditLog } from '@documenso/lib/types/document-audit-logs
 import { isDocumentCompleted } from '@documenso/lib/utils/document';
 import { findRecipientByEmail, isRecipientExpired } from '@documenso/lib/utils/recipients';
 import { formatDocumentsPath } from '@documenso/lib/utils/teams';
-import { ReadStatus, RecipientRole, SigningStatus } from '@documenso/prisma/client-browser';
 import { trpc } from '@documenso/trpc/react';
 import type { TFindDocumentsResponse } from '@documenso/trpc/server/document-router/find-documents.types';
 import { cn } from '@documenso/ui/lib/utils';
@@ -220,7 +220,7 @@ export const DocumentsTable = ({
         totalPages={results.totalPages}
         onPaginationChange={onPaginationChange}
         expandedRowId={expandedEnvelopeId}
-        renderExpandedRow={(row) => <DocumentsTableSignerBreakdown row={row} />}
+        renderExpandedRow={(row: DocumentsTableRow) => <DocumentsTableSignerBreakdown row={row} />}
         columnVisibility={{
           sender: team !== undefined,
         }}
