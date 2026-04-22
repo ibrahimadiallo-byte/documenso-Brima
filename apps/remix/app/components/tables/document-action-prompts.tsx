@@ -54,6 +54,7 @@ export const DocumentActionPrompts = ({ row }: DocumentActionPromptsProps) => {
     (r) =>
       r.signingStatus === SigningStatus.NOT_SIGNED &&
       r.role !== RecipientRole.CC &&
+      r.role !== RecipientRole.VIEWER &&
       r.sendStatus === SendStatus.SENT,
   );
 
@@ -64,7 +65,10 @@ export const DocumentActionPrompts = ({ row }: DocumentActionPromptsProps) => {
   const isPartiallySigned =
     isPending &&
     row.recipients.some(
-      (r) => r.signingStatus === SigningStatus.SIGNED && r.role !== RecipientRole.CC,
+      (r) =>
+        r.signingStatus === SigningStatus.SIGNED &&
+        r.role !== RecipientRole.CC &&
+        r.role !== RecipientRole.VIEWER,
     ) &&
     unsignedRecipients.length > 0;
 
