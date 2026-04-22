@@ -56,6 +56,8 @@ export const ZRecipientLiteSchema = RecipientSchema.pick({
   expiresAt: true,
   expirationNotifiedAt: true,
   signedAt: true,
+  sentAt: true,
+  lastReminderSentAt: true,
   authOptions: true,
   signingOrder: true,
   rejectionReason: true,
