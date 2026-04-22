@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import { Trans } from '@lingui/react/macro';
 import { DocumentStatus, RecipientRole, SendStatus, SigningStatus } from '@prisma/client';
 import { Bell, FileText, RefreshCw } from 'lucide-react';
@@ -38,6 +40,11 @@ export const DocumentActionPrompts = ({ row }: DocumentActionPromptsProps) => {
   const { user } = useSession();
   const team = useCurrentTeam();
   const { quota } = useLimits();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const documentsPath = formatDocumentsPath(team?.url ?? '');
   const auditLogPath = `${documentsPath}/${row.envelopeId}/logs`;
@@ -77,7 +84,7 @@ export const DocumentActionPrompts = ({ row }: DocumentActionPromptsProps) => {
   const showResendDocument = isOwner && isPartiallySigned;
   const showViewAuditLog = isOwner && isComplete;
 
-  if (!showSendReminder && !showResendDocument && !showViewAuditLog) {
+  if (!mounted || (!showSendReminder && !showResendDocument && !showViewAuditLog)) {
     return null;
   }
 
